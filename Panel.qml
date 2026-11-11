@@ -439,7 +439,7 @@ Panel {
             id: heroLabels
             anchors.left: heroIcon.right
             anchors.leftMargin: Style.space(14)
-            anchors.right: heroPercent.left
+            anchors.right: heroChips.visible ? heroChips.left : heroPercent.left
             anchors.rightMargin: Style.space(10)
             anchors.verticalCenter: parent.verticalCenter
             spacing: Style.space(2)
@@ -466,6 +466,16 @@ Panel {
               elide: Text.ElideRight
               width: parent.width
             }
+          }
+
+          // Side by side, the profile chips ride in the title row instead of
+          // taking a row of their own.
+          ProfileChips {
+            id: heroChips
+            visible: panel.split && root.knownProfiles.length > 1
+            anchors.right: heroPercent.left
+            anchors.rightMargin: Style.space(24)
+            anchors.verticalCenter: parent.verticalCenter
           }
 
           Text {
@@ -498,19 +508,10 @@ Panel {
           onChanged: function(v) { root.setSetting("view", v); if (v === "agents") root.refreshAgents() }
         }
 
-        // ---------- Profiles ----------
-        ButtonGroup {
-          visible: root.knownProfiles.length > 1
+        // ---------- Profiles (own row in the one-column layout) ----------
+        ProfileChips {
+          visible: !panel.split && root.knownProfiles.length > 1
           width: parent.width
-          spacing: Style.space(6)
-          focusable: false
-          options: [{ value: "all", label: root.tr("profile.all") }].concat(
-            root.knownProfiles.map(function(p) { return { value: p.id, label: p.id } }))
-          value: root.profile
-          foreground: root.fg
-          fontFamily: root.fontFamily
-          fontSize: Style.font.bodySmall
-          onChanged: function(v) { root.setSetting("profile", v) }
         }
 
         // ---------- Usage | Agents ----------
@@ -1117,6 +1118,19 @@ Panel {
   }
 
   // ---------- Components ----------
+
+  // All / one chip per profile; filters both views.
+  component ProfileChips: ButtonGroup {
+    spacing: Style.space(6)
+    focusable: false
+    options: [{ value: "all", label: root.tr("profile.all") }].concat(
+      root.knownProfiles.map(function(p) { return { value: p.id, label: p.id } }))
+    value: root.profile
+    foreground: root.fg
+    fontFamily: root.fontFamily
+    fontSize: Style.font.bodySmall
+    onChanged: function(v) { root.setSetting("profile", v) }
+  }
 
   // One agent: status dot, name, age and profile; what it is doing; where it
   // runs; then any subagents still going. Click to jump to it.
