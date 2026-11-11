@@ -66,7 +66,7 @@
   "agents.noWindow": "No window found for %1. It may be running inside tmux or another app.",
   "agents.openFailed": "Could not open %1.",
   "agents.error": "Could not list agents for %1",
-  "agents.hint": "Click an agent to jump to it; right-click for more (logs, stop, delete, copy resume command).",
+  "agents.hint": "Click an agent, or press the key on its left, to jump to it. Right-click for more (logs, stop, delete, copy resume command).",
   "tooltip.agents": "Agents: %1",
   "agents.actionFailed": "Could not finish that for %1.",
   "menu.attach": "Open (claude attach)",

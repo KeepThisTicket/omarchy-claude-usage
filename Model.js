@@ -324,12 +324,36 @@ function agentView(agents, profile, now) {
     if (tx !== ty) return ty - tx
     return String(x.name).localeCompare(String(y.name))
   }
-  var groups = []
+  var groups = [], next = 0
   for (var g = 0; g < AGENT_STATUSES.length; g++) {
     var key = AGENT_STATUSES[g]
-    if (buckets[key].length) groups.push({ status: key, items: buckets[key].sort(newest) })
+    if (!buckets[key].length) continue
+    // Copies, each with the key that opens it, in the order they're drawn.
+    var items = buckets[key].sort(newest).map(function(a) {
+      var c = {}
+      for (var k in a) c[k] = a[k]
+      c.hotkey = next < HOTKEYS.length ? HOTKEYS.charAt(next) : ""
+      next++
+      return c
+    })
+    groups.push({ status: key, items: items })
   }
   return { groups: groups, counts: counts, hiddenDone: hiddenDone }
+}
+
+// Keys that open agents, in screen order. h j k l (moving) and x (delete)
+// belong to the panel's own key handling.
+var HOTKEYS = "1234567890abcdefgimnopqrstuvwyz"
+
+// The agent a key press opens, or null.
+function agentForKey(view, key) {
+  var k = String(key || "").toLowerCase()
+  if (k.length !== 1 || HOTKEYS.indexOf(k) < 0) return null
+  var groups = (view && view.groups) || []
+  for (var g = 0; g < groups.length; g++)
+    for (var i = 0; i < groups[g].items.length; i++)
+      if (groups[g].items[i].hotkey === k) return groups[g].items[i]
+  return null
 }
 
 // Agents still going: everything but finished jobs.
@@ -374,6 +398,8 @@ if (typeof module !== "undefined") {
     modelLabel: modelLabel,
     AGENT_STATUSES: AGENT_STATUSES,
     agentView: agentView,
+    HOTKEYS: HOTKEYS,
+    agentForKey: agentForKey,
     activeAgentCount: activeAgentCount,
     formatAge: formatAge
   }

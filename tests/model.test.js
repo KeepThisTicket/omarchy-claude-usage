@@ -179,5 +179,21 @@ test("agent ages", () => {
   assert.strictEqual(M.formatAge(2 * 86400 + 5), "2d")
 })
 
+test("agent hotkeys follow screen order and skip the panel's own keys", () => {
+  const v = M.agentView(ag, "all", NOW)
+  const keys = [].concat(...v.groups.map(g => g.items.map(a => a.hotkey)))
+  assert.deepStrictEqual(keys, ["1", "2", "3", "4", "5", "6", "7"])
+  assert.strictEqual(v.groups[0].items[0].hotkey, "1")  // the one that needs you
+  assert.strictEqual(ag[0].hotkey, undefined)           // input objects untouched
+  for (const reserved of "hjklx") assert.ok(M.HOTKEYS.indexOf(reserved) < 0, reserved)
+  assert.strictEqual(M.HOTKEYS.slice(0, 11), "1234567890a")
+  const many = Array.from({ length: 40 }, (_, i) => ({ key: "k" + i, name: "n" + i, profile: "p", status: "idle", updatedAt: NOW - i }))
+  const items = M.agentView(many, "all", NOW).groups[0].items
+  assert.strictEqual(items[M.HOTKEYS.length - 1].hotkey, M.HOTKEYS[M.HOTKEYS.length - 1])
+  assert.strictEqual(items[M.HOTKEYS.length].hotkey, "")  // ran out of keys
+  assert.strictEqual(M.agentForKey(M.agentView(ag, "all", NOW), "3").key, "b")
+  assert.strictEqual(M.agentForKey(M.agentView(ag, "all", NOW), "Z"), null)
+})
+
 if (failed) { console.log(failed + " failed"); process.exit(1) }
 console.log("all passed")

@@ -21,6 +21,8 @@ as *Needs you · Failed · Working · Idle · Finished*.
 - **Click** to jump to it: focuses the terminal it runs in (also a terminal
   showing it through Claude Code's agent view), or opens `claude attach` for a
   background job.
+- **Press its key** to do the same without the mouse: each row shows one
+  (`1`–`9`, `0`, then letters, skipping the panel's own `h j k l x`).
 - **Right-click** for more: show logs, stop, delete (`claude rm`, which never
   discards unpushed commits), end a session, or copy a resume command.
 

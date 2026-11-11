@@ -411,6 +411,14 @@ Panel {
         else root.close()
       }
       onTabRequested: function(direction) { root.switchPanel(direction) }
+      // An agent's key (shown on its row) opens it, as a click would.
+      onTextKey: function(text, modifiers) {
+        if (root.pendingAction || root.menuAgent) return
+        if (modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) return
+        if (!panel.split && root.view !== "agents") return
+        var a = Model.agentForKey(root.agentView, text)
+        if (a) root.openAgent(a)
+      }
 
       Column {
         id: column
@@ -1185,12 +1193,35 @@ Panel {
         width: parent.width
         implicitHeight: arName.implicitHeight
 
+        // The key that opens this agent while the panel has focus.
+        Rectangle {
+          id: arKey
+          width: Math.max(16, Style.space(18))
+          height: width
+          radius: Style.space(4)
+          color: "transparent"
+          border.width: 1
+          border.color: Util.alpha(root.fg, 0.25)
+          opacity: ar.agent && ar.agent.hotkey ? 1 : 0  // keeps its room so rows stay aligned
+          anchors.verticalCenter: parent.verticalCenter
+          Text {
+            anchors.centerIn: parent
+            textFormat: Text.PlainText
+            text: ar.agent ? ar.agent.hotkey : ""
+            color: root.faint
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+        }
         Rectangle {
           id: arDot
           width: Math.max(7, Style.space(8))
           height: width
           radius: width / 2
           color: ar.tint
+          anchors.left: arKey.right
+          anchors.leftMargin: Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
           SequentialAnimation on opacity {
             running: !!ar.agent && ar.agent.status === "working" && root.opened
@@ -1235,7 +1266,7 @@ Panel {
 
       Text {
         visible: ar.line !== ""
-        x: arDot.width + Style.space(8)
+        x: arDot.x + arDot.width + Style.space(8)
         width: parent.width - x
         textFormat: Text.PlainText
         text: ar.line
@@ -1249,7 +1280,7 @@ Panel {
       }
 
       Text {
-        x: arDot.width + Style.space(8)
+        x: arDot.x + arDot.width + Style.space(8)
         width: parent.width - x
         textFormat: Text.PlainText
         text: ar.meta
@@ -1263,7 +1294,7 @@ Panel {
         model: ar.agent ? ar.agent.subagents : []
         Text {
           required property var modelData
-          x: arDot.width + Style.space(8)
+          x: arDot.x + arDot.width + Style.space(8)
           width: arColumn.width - x
           textFormat: Text.PlainText
           text: "↳ " + [modelData.description || root.tr("agents.subagent"), modelData.type,
