@@ -291,7 +291,7 @@ Panel {
   // Agents: every 3 s while the list is on screen, otherwise each minute for
   // the bar's tooltip.
   Timer {
-    interval: root.opened && root.view === "agents" ? 3000 : 60000
+    interval: root.opened && (panel.split || root.view === "agents") ? 3000 : 60000
     running: true; repeat: true
     onTriggered: root.refreshAgents()
   }
@@ -336,7 +336,7 @@ Panel {
   }
 
   readonly property string statusText: {
-    if (view === "agents" && hoverDay === "") return agentsData ? agentSummary(agentView.counts) : tr("agents.loading")
+    if (view === "agents" && !panel.split && hoverDay === "") return agentsData ? agentSummary(agentView.counts) : tr("agents.loading")
     if (hoverDay !== "") return dayText(hoverDay)
     if (headline) return strings.t("status.headline").arg(headline.label).arg(Model.formatPercent(headlinePercent))
       .arg(Model.formatCountdown(Math.max(0, (headline.resetsAt || nowSecs) - nowSecs)))
@@ -382,7 +382,13 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: panel.loadedContent
-    contentWidth: panel.fittedContentWidth(Style.space(520))
+    // Usage and Agents side by side when the screen has room for both columns;
+    // otherwise one column with the Usage | Agents switch.
+    readonly property real columnWidth: Style.space(520)
+    readonly property real columnGap: Style.space(28)
+    readonly property real splitWidth: 2 * columnWidth + columnGap
+    readonly property bool split: fittedContentWidth(splitWidth) >= splitWidth
+    contentWidth: split ? splitWidth : panel.fittedContentWidth(columnWidth)
     contentHeight: panel.fittedContentHeight(panel.loadedContentHeight)
 
     content: PanelKeyCatcher {
@@ -475,8 +481,9 @@ Panel {
           }
         }
 
-        // ---------- View ----------
+        // ---------- View (one-column layout only) ----------
         ButtonGroup {
+          visible: !panel.split
           width: parent.width
           spacing: Style.space(6)
           focusable: false
@@ -506,11 +513,18 @@ Panel {
           onChanged: function(v) { root.setSetting("profile", v) }
         }
 
+        // ---------- Usage | Agents ----------
+        Row {
+          id: views
+          width: parent.width
+          spacing: panel.split ? panel.columnGap : 0
+          readonly property real paneWidth: panel.split ? (width - spacing) / 2 : width
+
         // ---------- Usage view ----------
         Column {
-          width: parent.width
+          width: views.paneWidth
           spacing: Style.space(14)
-          visible: root.view === "usage"
+          visible: panel.split || root.view === "usage"
 
         // ---------- Limits ----------
         Column {
@@ -926,9 +940,39 @@ Panel {
 
         // ---------- Agents view ----------
         Column {
-          width: parent.width
+          width: views.paneWidth
           spacing: Style.space(12)
-          visible: root.view === "agents"
+          visible: panel.split || root.view === "agents"
+
+          // Side by side there is no switch to carry the count, so the column
+          // gets its own header.
+          Item {
+            visible: panel.split
+            width: parent.width
+            implicitHeight: Math.max(agentsHeader.implicitHeight, agentsSummary.implicitHeight)
+            PanelSectionHeader {
+              id: agentsHeader
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.tr("view.agents")
+              foreground: root.fg
+              fontFamily: root.fontFamily
+            }
+            Text {
+              id: agentsSummary
+              anchors.left: agentsHeader.right
+              anchors.leftMargin: Style.space(12)
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              horizontalAlignment: Text.AlignRight
+              textFormat: Text.PlainText
+              text: root.agentsData ? root.agentSummary(root.agentView.counts) : root.tr("agents.loading")
+              color: root.faint
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              elide: Text.ElideRight
+            }
+          }
 
           Text {
             visible: !!root.agentsData && root.agentView.groups.length === 0
@@ -1009,6 +1053,7 @@ Panel {
             font.pixelSize: Style.font.caption
             wrapMode: Text.WordWrap
           }
+        }
         }
       }
 

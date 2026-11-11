@@ -2,7 +2,9 @@
 
 A bar widget for the [Omarchy](https://omarchy.org) shell for people who use
 [Claude Code](https://docs.claude.com/en/docs/claude-code). The bar shows your
-current 5-hour limit. The popout has two views:
+current 5-hour limit. The popout shows two views side by side when the screen
+has room for both (about 1,070 logical pixels), and one at a time with a
+Usage | Agents switch on narrower screens:
 
 **Usage**
 - Plan limits (5-hour, weekly and per-model) with reset countdowns.
