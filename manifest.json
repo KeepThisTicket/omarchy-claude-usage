@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "kov.claude-usage",
+  "name": "Claude usage",
+  "version": "1.0.0",
+  "author": "KeepThisTicket",
+  "description": "Claude Code usage per profile: plan limits and resets, tokens, API-equivalent cost and a year heatmap",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Claude usage",
+    "description": "Claude Code usage per profile: plan limits and resets, tokens, API-equivalent cost and a year heatmap",
+    "category": "System",
+    "allowMultiple": false
+  }
+}
