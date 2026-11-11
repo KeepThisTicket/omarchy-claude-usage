@@ -125,18 +125,33 @@ function summarize(rows, sessions, profile, from, to) {
   })
 }
 
-// day -> { tokens, cost, messages, sessions } for one profile or all.
-function daily(rows, sessions, profile) {
+// day -> { tokens, cost, messages, sessions, prompts, promptsOnly } for one
+// profile or all. prompts is the collector's {day: {profile: [prompts,
+// sessions]}} from Claude Code's prompt log; a day it covers with no token
+// rows (its transcripts were cleaned up) is marked promptsOnly and takes its
+// session count from the log.
+function daily(rows, sessions, profile, prompts) {
   var out = {}
   for (var i = 0; i < (rows || []).length; i++) {
     var r = rows[i]
     if (!matches(r, profile, "", "")) continue
-    var d = out[r[0]] || (out[r[0]] = { tokens: 0, cost: 0, messages: 0, sessions: 0 })
+    var d = out[r[0]] || (out[r[0]] = { tokens: 0, cost: 0, messages: 0, sessions: 0, prompts: 0, promptsOnly: false })
     d.tokens += rowTokens(r)
     d.cost += r[9]
     d.messages += r[10]
   }
   for (var day in out) out[day].sessions = sessionsIn(sessions || {}, profile, day, day)
+  for (var pday in (prompts || {})) {
+    var n = 0, s = 0, byProfile = prompts[pday]
+    for (var p in byProfile) {
+      if (profile !== "all" && p !== profile) continue
+      n += byProfile[p][0]
+      s += byProfile[p][1]
+    }
+    if (n <= 0) continue
+    if (out[pday]) out[pday].prompts = n
+    else out[pday] = { tokens: 0, cost: 0, messages: 0, sessions: s, prompts: n, promptsOnly: true }
+  }
   return out
 }
 
@@ -160,22 +175,27 @@ function levelFor(v, th) {
 }
 
 // Weeks run Monday..Sunday top to bottom; the last column holds today.
-// Returns { cells: [{day, col, row, value, level, future}], months: [{col, month}],
-//           thresholds }.
+// Prompts-only days (no token data) are levelled on their own scale by prompt
+// count, so they show activity without pretending to be token/cost data.
+// Returns { cells: [{day, col, row, value, level, future, promptsOnly}],
+//           months: [{col, month}], thresholds, promptsOnlyDays }.
 function heatmap(dailyMap, today, weeks, metric) {
   var t = parseDay(today)
   var dow = (t.getDay() + 6) % 7  // Monday = 0
   var start = addDays(today, -dow - 7 * (weeks - 1))
-  var cells = [], values = []
+  var cells = [], values = [], promptValues = []
   var months = [], lastMonth = -1
   for (var c = 0; c < weeks; c++) {
     for (var r = 0; r < 7; r++) {
       var day = addDays(start, c * 7 + r)
       var future = day > today
       var e = dailyMap[day]
-      var v = future || !e ? 0 : Number(e[metric] || 0)
-      if (!future) values.push(v)
-      cells.push({ day: day, col: c, row: r, value: v, level: 0, future: future })
+      var only = !future && !!e && !!e.promptsOnly
+      var v = future || !e || only ? 0 : Number(e[metric] || 0)
+      if (only) promptValues.push(e.prompts)
+      else if (!future) values.push(v)
+      cells.push({ day: day, col: c, row: r, value: v, level: 0, future: future, promptsOnly: only,
+                   prompts: only ? e.prompts : 0 })
       if (r === 0) {
         var month = parseDay(day).getMonth()
         // Label a month at the first week that starts in it.
@@ -186,15 +206,16 @@ function heatmap(dailyMap, today, weeks, metric) {
       }
     }
   }
-  var th = levelThresholds(values)
-  for (var i = 0; i < cells.length; i++) cells[i].level = levelFor(cells[i].value, th)
-  return { cells: cells, months: months, thresholds: th }
+  var th = levelThresholds(values), pth = levelThresholds(promptValues)
+  for (var i = 0; i < cells.length; i++)
+    cells[i].level = cells[i].promptsOnly ? levelFor(cells[i].prompts, pth) : levelFor(cells[i].value, th)
+  return { cells: cells, months: months, thresholds: th, promptsOnlyDays: promptValues.length }
 }
 
 // Consecutive active days ending today (or yesterday, if today is still
 // empty), and the longest run on record.
 function streaks(dailyMap, today) {
-  function active(d) { var e = dailyMap[d]; return !!e && (e.messages > 0 || e.tokens > 0) }
+  function active(d) { var e = dailyMap[d]; return !!e && (e.messages > 0 || e.tokens > 0 || e.prompts > 0) }
   var current = 0
   var d = active(today) ? today : addDays(today, -1)
   while (active(d)) { current++; d = addDays(d, -1) }

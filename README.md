@@ -47,6 +47,9 @@ Update later with `omarchy plugin update kov.claude-usage`.
 ## Privacy and network use
 
 - Usage numbers come from your local transcripts (`<config dir>/projects/**/*.jsonl`).
+- Days from before the transcripts were cleaned up are filled in from Claude
+  Code's prompt log (`<config dir>/history.jsonl`): prompts and sessions only,
+  drawn in grey on the heatmap since their token counts are gone.
 - Plan limits come from Claude Code's own cached reading. While the popout is
   open, and at most every 5 minutes, the plugin refreshes them from
   `https://api.anthropic.com/api/oauth/usage` using the access token Claude Code
