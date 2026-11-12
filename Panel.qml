@@ -54,7 +54,8 @@ Panel {
   readonly property var shownAccounts: Model.accountsFor(accounts, profile)
   readonly property var headline: Model.headlineLimit(accounts)
   readonly property var headlinePercent: Model.livePercent(headline, nowSecs)
-  readonly property var dailyMap: Model.daily(rows, sessions, profile)
+  readonly property var prompts: usage && usage.prompts ? usage.prompts : ({})
+  readonly property var dailyMap: Model.daily(rows, sessions, profile, prompts)
   readonly property var heat: Model.heatmap(dailyMap, today, 53, metric)
   readonly property var summary: Model.summarize(rows, sessions, profile, Model.rangeStart(range, today), today)
   readonly property var streak: Model.streaks(dailyMap, today)
@@ -80,6 +81,11 @@ Panel {
   function levelColor(level) {
     if (level <= 0) return Util.alpha(root.fg, 0.08)
     return Util.alpha(root.claudeColor, [0, 0.3, 0.5, 0.75, 1][level])
+  }
+  // Days known only from the prompt log (no token data): a neutral ramp.
+  function promptLevelColor(level) {
+    if (level <= 0) return Util.alpha(root.fg, 0.08)
+    return Util.alpha(root.fg, [0, 0.2, 0.32, 0.46, 0.62][level])
   }
   function limitColor(p) {
     if (p >= 90) return root.urgentColor
@@ -322,6 +328,7 @@ Panel {
     var e = root.dailyMap[day]
     var label = root.fmtDay(day, "ddd d MMM")
     if (!e) return strings.t("activity.empty").arg(label)
+    if (e.promptsOnly) return strings.t("activity.promptsOnly").arg(label).arg(Model.formatCount(e.prompts)).arg(e.sessions)
     return strings.t("activity.day").arg(label).arg(Model.formatTokens(e.tokens)).arg(Model.formatCost(e.cost))
       .arg(Model.formatCount(e.messages)).arg(e.sessions)
   }
@@ -714,7 +721,7 @@ Panel {
                 for (var i = 0; i < list.length; i++) {
                   var c = list[i]
                   if (c.future) continue
-                  ctx.fillStyle = root.levelColor(c.level)
+                  ctx.fillStyle = c.promptsOnly ? root.promptLevelColor(c.level) : root.levelColor(c.level)
                   ctx.beginPath()
                   ctx.roundedRect(c.col * p, c.row * p, s, s, r, r)
                   ctx.fill()
@@ -825,6 +832,25 @@ Panel {
             color: root.faint
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
+          }
+
+          Row {
+            visible: root.heat.promptsOnlyDays > 0
+            spacing: Style.space(5)
+            Rectangle {
+              width: Math.max(6, grid.pitch - grid.gap)
+              height: width
+              radius: 2
+              color: root.promptLevelColor(3)
+              anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
+              textFormat: Text.PlainText
+              text: root.tr("activity.promptsOnlyNote")
+              color: root.faint
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
           }
         }
 

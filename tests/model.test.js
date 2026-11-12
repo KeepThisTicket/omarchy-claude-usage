@@ -64,6 +64,42 @@ test("daily map", () => {
   assert.strictEqual(d["2026-11-03"].sessions, 0)
 })
 
+// day -> profile -> [prompts, sessions], from Claude Code's prompt log.
+const prompts = {
+  "2026-05-09": { claude: [5, 2] },
+  "2026-06-01": { claude: [7, 1], work: [13, 3] },
+  "2026-11-10": { claude: [4, 1] },
+}
+
+test("daily map fills days without token data from the prompt log", () => {
+  const d = M.daily(rows, sessions, "all", prompts)
+  assert.deepStrictEqual(d["2026-06-01"], { tokens: 0, cost: 0, messages: 0, sessions: 4, prompts: 20, promptsOnly: true })
+  assert.strictEqual(d["2026-11-10"].prompts, 4)
+  assert.strictEqual(d["2026-11-10"].promptsOnly, false)
+  assert.strictEqual(d["2026-11-10"].sessions, 3)  // transcript sessions win when tokens exist
+  assert.strictEqual(M.daily(rows, sessions, "work", prompts)["2026-05-09"], undefined)
+  assert.strictEqual(M.daily(rows, sessions, "claude", prompts)["2026-06-01"].prompts, 7)
+})
+
+test("prompts-only days get their own levels in the heatmap", () => {
+  const h = M.heatmap(M.daily(rows, sessions, "all", prompts), "2026-11-11", 53, "tokens")
+  const jun = h.cells.find(c => c.day === "2026-06-01")
+  const may = h.cells.find(c => c.day === "2026-05-09")
+  assert.ok(jun.promptsOnly && may.promptsOnly)
+  assert.strictEqual(jun.value, 0)
+  assert.strictEqual(jun.level, 4)
+  assert.ok(may.level >= 1 && may.level < 4)
+  // Token days keep their own scale.
+  assert.strictEqual(h.cells.find(c => c.day === "2026-11-03").level, 4)
+  assert.ok(!h.cells.find(c => c.day === "2026-11-03").promptsOnly)
+  assert.strictEqual(h.promptsOnlyDays, 2)
+})
+
+test("streaks count prompts-only days", () => {
+  const d = { "2026-06-01": { prompts: 3, promptsOnly: true }, "2026-06-02": { messages: 1 } }
+  assert.deepStrictEqual(M.streaks(d, "2026-06-02"), { current: 2, longest: 2, activeDays: 2 })
+})
+
 test("heatmap grid ends on today's week, Monday first", () => {
   // 2026-11-11 is a Wednesday.
   const h = M.heatmap(M.daily(rows, sessions, "all"), "2026-11-11", 53, "tokens")

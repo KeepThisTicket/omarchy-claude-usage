@@ -24,6 +24,8 @@
   "activity.year": "Last 12 months: %1",
   "activity.day": "%1 · %2 tokens · %3 · %4 msgs · %5 sessions",
   "activity.empty": "%1 · no usage",
+  "activity.promptsOnly": "%1 · %2 prompts · %3 sessions · no token data",
+  "activity.promptsOnlyNote": "Prompts only: transcripts already cleaned up, no token data",
   "activity.streak": "Streak %1 · longest %2 · %3 active days",
   "activity.less": "Less",
   "activity.more": "More",

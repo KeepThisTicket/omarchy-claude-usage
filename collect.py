@@ -7,6 +7,9 @@ Each ~/.claude* config dir is a profile ("claude", "work", ...). Reads:
     refreshed from the OAuth usage endpoint when stale (read-only: the stored
     access token is used as-is and never refreshed or rewritten)
 
+  * prompts and sessions per day from <dir>/history.jsonl, which outlives the
+    transcripts and fills in activity (not tokens) for older days
+
 Daily totals are kept in ~/.local/state/kov-claude-usage/history.json so the
 heatmap outlives Claude Code's ~30 day transcript cleanup.
 
@@ -248,13 +251,53 @@ def scan_usage(profiles):
     return rows, sess, last, sorted(unpriced)
 
 
+def scan_prompts(profiles):
+    """{day: {profile: [prompts, sessions]}} from each dir's history.jsonl, the
+    log of typed prompts. Claude Code keeps it long after the transcripts are
+    gone, so it fills in activity (but not tokens) for older days."""
+    out = {}
+    for prof in profiles:
+        try:
+            fh = open(os.path.join(prof["dir"], "history.jsonl"), "r", errors="replace")
+        except OSError:
+            continue
+        days = {}
+        with fh:
+            for line in fh:
+                try:
+                    o = json.loads(line)
+                    day = datetime.datetime.fromtimestamp(o["timestamp"] / 1000.0).strftime("%Y-%m-%d")
+                except (ValueError, TypeError, KeyError, OverflowError, OSError):
+                    continue
+                d = days.setdefault(day, [0, set()])
+                d[0] += 1
+                if o.get("sessionId"):
+                    d[1].add(o["sessionId"])
+        for day, (n, sids) in days.items():
+            out.setdefault(day, {})[prof["id"]] = [n, len(sids)]
+    return out
+
+
+def merge_prompts(stored, fresh):
+    """Per (day, profile): the larger prompt count wins, so trimming the log
+    never loses days already seen."""
+    out = {day: dict(v) for day, v in (stored or {}).items() if isinstance(v, dict)}
+    for day, byp in fresh.items():
+        for pid, cur in byp.items():
+            old = out.get(day, {}).get(pid)
+            if not old or cur[0] >= old[0]:
+                out.setdefault(day, {})[pid] = cur
+    return out
+
+
 def row_tokens(r):
     return r[3] + r[4] + r[5] + r[6] + r[7]
 
 
-def merge_history(stored, rows, sessions):
+def merge_history(stored, rows, sessions, prompts=None):
     """Per (day, profile): keep the fresh scan unless the stored copy holds
-    more tokens (its transcripts have since been cleaned up)."""
+    more tokens (its transcripts have since been cleaned up). Prompt counts
+    merge separately (see merge_prompts)."""
     def group(rs):
         g = {}
         for r in rs:
@@ -274,7 +317,8 @@ def merge_history(stored, rows, sessions):
         if s:
             out_sess.setdefault(day, {})[pid] = s
     out_rows.sort()
-    return {"version": HISTORY_VERSION, "rows": out_rows, "sessions": out_sess}
+    return {"version": HISTORY_VERSION, "rows": out_rows, "sessions": out_sess,
+            "prompts": merge_prompts(stored.get("prompts"), prompts or {})}
 
 
 # ------------------------------------------------------------------ limits --
@@ -410,16 +454,18 @@ def collect(home, state_dir, cache_dir, now, online=True, limits_only=False,
             max_age=DEFAULT_MAX_AGE, fetch=fetch_usage):
     profiles = [read_profile_meta(home, p) for p in discover_profiles(home)]
     out = {"now": now, "profiles": [], "accounts": [], "rows": [], "sessions": {},
-           "unpriced": [], "limitsOnly": limits_only}
+           "prompts": {}, "unpriced": [], "limitsOnly": limits_only}
 
     if not limits_only:
         rows, sessions, last, unpriced = scan_usage(profiles)
         hist_path = os.path.join(state_dir, "history.json")
         stored = load_json(hist_path, {}) or {}
-        merged = merge_history(stored if stored.get("version") == HISTORY_VERSION else {}, rows, sessions)
+        merged = merge_history(stored if stored.get("version") == HISTORY_VERSION else {},
+                               rows, sessions, scan_prompts(profiles))
         if merged != {k: stored.get(k) for k in merged}:
             write_json(hist_path, merged)
         out["rows"], out["sessions"], out["unpriced"] = merged["rows"], merged["sessions"], unpriced
+        out["prompts"] = merged["prompts"]
         for p in profiles:
             p["lastActive"] = last.get(p["id"])
 
