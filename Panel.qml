@@ -402,14 +402,6 @@ Panel {
         height: dots.size
         radius: dots.size / 2
         color: root.agentColors[modelData] || root.fg
-        // Pulses like the working dot in the Agents list.
-        SequentialAnimation on opacity {
-          running: modelData === "working"
-          loops: Animation.Infinite
-          alwaysRunToEnd: true
-          NumberAnimation { from: 1; to: 0.35; duration: 700; easing.type: Easing.InOutSine }
-          NumberAnimation { from: 0.35; to: 1; duration: 700; easing.type: Easing.InOutSine }
-        }
       }
     }
   }
