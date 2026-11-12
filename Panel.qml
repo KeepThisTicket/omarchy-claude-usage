@@ -294,10 +294,10 @@ Panel {
     pendingAction = null
     if (opened) { refresh(); refreshAgents(); agentNote = "" }
   }
-  // Agents: every 3 s while the list is on screen, otherwise each minute for
-  // the bar's tooltip.
+  // Agents: every 3 s while the list is on screen, otherwise every 15 s for
+  // the bar's status dots and tooltip (one run takes ~0.3 s).
   Timer {
-    interval: root.opened && (panel.split || root.view === "agents") ? 3000 : 60000
+    interval: root.opened && (panel.split || root.view === "agents") ? 3000 : 15000
     running: true; repeat: true
     onTriggered: root.refreshAgents()
   }
@@ -366,12 +366,17 @@ Panel {
   }
 
   // ---------- Bar ----------
-  implicitWidth: button.implicitWidth
-  implicitHeight: button.implicitHeight
+  // One dot per agent status present (needs you, failed, working, idle,
+  // finished), in the panel's colours, beside the icon.
+  readonly property var barDots: agentsData ? Model.barStatuses(Model.agentView(agentList, "all", nowSecs)) : []
+  readonly property real dotGap: Style.space(1)
+  implicitWidth: button.implicitWidth + (!button.vertical && dots.visible ? dots.width + dotGap : 0)
+  implicitHeight: button.implicitHeight + (button.vertical && dots.visible ? dots.height + dotGap : 0)
 
   BarIconButton {
     id: button
-    anchors.fill: parent
+    width: vertical ? root.width : implicitWidth
+    height: vertical ? implicitHeight : root.height
     bar: root.bar
     text: root.glyph
     labelText: root.headline && !vertical ? Model.formatPercent(root.headlinePercent) : ""
@@ -379,6 +384,34 @@ Panel {
     active: root.headlinePercent !== null && root.headlinePercent >= 90
     tooltipText: root.tooltip
     onPressed: function(b) { root.toggle() }
+  }
+
+  Grid {
+    id: dots
+    visible: root.barDots.length > 0
+    readonly property real size: Math.max(5, Math.round(Style.bar.iconSize * 0.36))
+    columns: button.vertical ? 1 : Math.max(1, root.barDots.length)
+    spacing: Math.max(2, Math.round(size * 0.5))
+    x: button.vertical ? (root.width - width) / 2 : button.width + root.dotGap
+    y: button.vertical ? button.height + root.dotGap : (root.height - height) / 2
+    Repeater {
+      model: root.barDots
+      Rectangle {
+        required property var modelData
+        width: dots.size
+        height: dots.size
+        radius: dots.size / 2
+        color: root.agentColors[modelData] || root.fg
+      }
+    }
+  }
+
+  MouseArea {
+    visible: dots.visible
+    anchors.fill: dots
+    anchors.margins: -Style.space(3)
+    cursorShape: Qt.PointingHandCursor
+    onClicked: root.toggle()
   }
 
   // ---------- Popout ----------
