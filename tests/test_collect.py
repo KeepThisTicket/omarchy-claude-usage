@@ -26,6 +26,10 @@ def rec(mid, req, ts, model="claude-opus-5-5", sid="s1", side=False, **u):
                        "isSidechain": side, "message": {"id": mid, "model": model, "usage": usage(**u)}})
 
 
+def local_ms(y, mo, d, h):
+    return int(time.mktime((y, mo, d, h, 0, 0, 0, 0, -1)) * 1000)
+
+
 class Fixture:
     def __init__(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -54,6 +58,13 @@ class Fixture:
         with open(path, "w") as f:
             f.write("\n".join(lines) + "\n")
         return path
+
+    def prompt_log(self, profile_dir, entries):
+        """entries: (epoch_ms, session_id) pairs written to <dir>/history.jsonl."""
+        with open(os.path.join(profile_dir, "history.jsonl"), "w") as f:
+            for ms, sid in entries:
+                f.write(json.dumps({"display": "hi", "pastedContents": {}, "timestamp": ms,
+                                    "project": "/p", "sessionId": sid}) + "\n")
 
     def run(self, **kw):
         kw.setdefault("online", False)
@@ -139,6 +150,30 @@ class ScanTests(unittest.TestCase):
         # A partially cleaned day keeps the larger stored total.
         nov = [r for r in second["rows"] if r[0] != old_day]
         self.assertEqual(sum(r[4] for r in nov), 10)
+
+    def test_prompt_log_counts_prompts_and_sessions_per_day(self):
+        claude = self.f.profile(".claude")
+        work = self.f.profile(".claude-work")
+        may = local_ms(2026, 5, 9, 12)
+        jun = local_ms(2026, 6, 1, 9)
+        self.f.prompt_log(claude, [(may, "a"), (may + 1000, "a"), (may + 2000, "b"), (jun, "c")])
+        with open(os.path.join(claude, "history.jsonl"), "a") as f:
+            f.write("not json\n" + json.dumps({"display": "no timestamp"}) + "\n")
+        self.f.prompt_log(work, [(may, "z")])
+        out = self.f.run()
+        self.assertEqual(out["prompts"], {"2026-05-09": {"claude": [3, 2], "work": [1, 1]},
+                                          "2026-06-01": {"claude": [1, 1]}})
+
+    def test_prompt_counts_survive_a_trimmed_log(self):
+        d = self.f.profile(".claude")
+        may = local_ms(2026, 5, 9, 12)
+        jun = local_ms(2026, 6, 1, 9)
+        self.f.prompt_log(d, [(may, "a"), (may + 1, "a"), (jun, "b")])
+        self.f.run()
+        self.f.prompt_log(d, [(may + 1, "a"), (jun, "b"), (jun + 1, "b")])
+        out = self.f.run()
+        self.assertEqual(out["prompts"]["2026-05-09"]["claude"], [2, 1])
+        self.assertEqual(out["prompts"]["2026-06-01"]["claude"], [2, 1])
 
     def test_limits_only_skips_scan(self):
         self.f.profile(".claude")

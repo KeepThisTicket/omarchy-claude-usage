@@ -125,18 +125,33 @@ function summarize(rows, sessions, profile, from, to) {
   })
 }
 
-// day -> { tokens, cost, messages, sessions } for one profile or all.
-function daily(rows, sessions, profile) {
+// day -> { tokens, cost, messages, sessions, prompts, promptsOnly } for one
+// profile or all. prompts is the collector's {day: {profile: [prompts,
+// sessions]}} from Claude Code's prompt log; a day it covers with no token
+// rows (its transcripts were cleaned up) is marked promptsOnly and takes its
+// session count from the log.
+function daily(rows, sessions, profile, prompts) {
   var out = {}
   for (var i = 0; i < (rows || []).length; i++) {
     var r = rows[i]
     if (!matches(r, profile, "", "")) continue
-    var d = out[r[0]] || (out[r[0]] = { tokens: 0, cost: 0, messages: 0, sessions: 0 })
+    var d = out[r[0]] || (out[r[0]] = { tokens: 0, cost: 0, messages: 0, sessions: 0, prompts: 0, promptsOnly: false })
     d.tokens += rowTokens(r)
     d.cost += r[9]
     d.messages += r[10]
   }
   for (var day in out) out[day].sessions = sessionsIn(sessions || {}, profile, day, day)
+  for (var pday in (prompts || {})) {
+    var n = 0, s = 0, byProfile = prompts[pday]
+    for (var p in byProfile) {
+      if (profile !== "all" && p !== profile) continue
+      n += byProfile[p][0]
+      s += byProfile[p][1]
+    }
+    if (n <= 0) continue
+    if (out[pday]) out[pday].prompts = n
+    else out[pday] = { tokens: 0, cost: 0, messages: 0, sessions: s, prompts: n, promptsOnly: true }
+  }
   return out
 }
 
@@ -160,22 +175,27 @@ function levelFor(v, th) {
 }
 
 // Weeks run Monday..Sunday top to bottom; the last column holds today.
-// Returns { cells: [{day, col, row, value, level, future}], months: [{col, month}],
-//           thresholds }.
+// Prompts-only days (no token data) are levelled on their own scale by prompt
+// count, so they show activity without pretending to be token/cost data.
+// Returns { cells: [{day, col, row, value, level, future, promptsOnly}],
+//           months: [{col, month}], thresholds, promptsOnlyDays }.
 function heatmap(dailyMap, today, weeks, metric) {
   var t = parseDay(today)
   var dow = (t.getDay() + 6) % 7  // Monday = 0
   var start = addDays(today, -dow - 7 * (weeks - 1))
-  var cells = [], values = []
+  var cells = [], values = [], promptValues = []
   var months = [], lastMonth = -1
   for (var c = 0; c < weeks; c++) {
     for (var r = 0; r < 7; r++) {
       var day = addDays(start, c * 7 + r)
       var future = day > today
       var e = dailyMap[day]
-      var v = future || !e ? 0 : Number(e[metric] || 0)
-      if (!future) values.push(v)
-      cells.push({ day: day, col: c, row: r, value: v, level: 0, future: future })
+      var only = !future && !!e && !!e.promptsOnly
+      var v = future || !e || only ? 0 : Number(e[metric] || 0)
+      if (only) promptValues.push(e.prompts)
+      else if (!future) values.push(v)
+      cells.push({ day: day, col: c, row: r, value: v, level: 0, future: future, promptsOnly: only,
+                   prompts: only ? e.prompts : 0 })
       if (r === 0) {
         var month = parseDay(day).getMonth()
         // Label a month at the first week that starts in it.
@@ -186,15 +206,16 @@ function heatmap(dailyMap, today, weeks, metric) {
       }
     }
   }
-  var th = levelThresholds(values)
-  for (var i = 0; i < cells.length; i++) cells[i].level = levelFor(cells[i].value, th)
-  return { cells: cells, months: months, thresholds: th }
+  var th = levelThresholds(values), pth = levelThresholds(promptValues)
+  for (var i = 0; i < cells.length; i++)
+    cells[i].level = cells[i].promptsOnly ? levelFor(cells[i].prompts, pth) : levelFor(cells[i].value, th)
+  return { cells: cells, months: months, thresholds: th, promptsOnlyDays: promptValues.length }
 }
 
 // Consecutive active days ending today (or yesterday, if today is still
 // empty), and the longest run on record.
 function streaks(dailyMap, today) {
-  function active(d) { var e = dailyMap[d]; return !!e && (e.messages > 0 || e.tokens > 0) }
+  function active(d) { var e = dailyMap[d]; return !!e && (e.messages > 0 || e.tokens > 0 || e.prompts > 0) }
   var current = 0
   var d = active(today) ? today : addDays(today, -1)
   while (active(d)) { current++; d = addDays(d, -1) }
@@ -324,12 +345,36 @@ function agentView(agents, profile, now) {
     if (tx !== ty) return ty - tx
     return String(x.name).localeCompare(String(y.name))
   }
-  var groups = []
+  var groups = [], next = 0
   for (var g = 0; g < AGENT_STATUSES.length; g++) {
     var key = AGENT_STATUSES[g]
-    if (buckets[key].length) groups.push({ status: key, items: buckets[key].sort(newest) })
+    if (!buckets[key].length) continue
+    // Copies, each with the key that opens it, in the order they're drawn.
+    var items = buckets[key].sort(newest).map(function(a) {
+      var c = {}
+      for (var k in a) c[k] = a[k]
+      c.hotkey = next < HOTKEYS.length ? HOTKEYS.charAt(next) : ""
+      next++
+      return c
+    })
+    groups.push({ status: key, items: items })
   }
   return { groups: groups, counts: counts, hiddenDone: hiddenDone }
+}
+
+// Keys that open agents, in screen order. h j k l (moving) and x (delete)
+// belong to the panel's own key handling.
+var HOTKEYS = "1234567890abcdefgimnopqrstuvwyz"
+
+// The agent a key press opens, or null.
+function agentForKey(view, key) {
+  var k = String(key || "").toLowerCase()
+  if (k.length !== 1 || HOTKEYS.indexOf(k) < 0) return null
+  var groups = (view && view.groups) || []
+  for (var g = 0; g < groups.length; g++)
+    for (var i = 0; i < groups[g].items.length; i++)
+      if (groups[g].items[i].hotkey === k) return groups[g].items[i]
+  return null
 }
 
 // Agents still going: everything but finished jobs.
@@ -374,6 +419,8 @@ if (typeof module !== "undefined") {
     modelLabel: modelLabel,
     AGENT_STATUSES: AGENT_STATUSES,
     agentView: agentView,
+    HOTKEYS: HOTKEYS,
+    agentForKey: agentForKey,
     activeAgentCount: activeAgentCount,
     formatAge: formatAge
   }

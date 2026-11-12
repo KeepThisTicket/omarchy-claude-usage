@@ -54,7 +54,8 @@ Panel {
   readonly property var shownAccounts: Model.accountsFor(accounts, profile)
   readonly property var headline: Model.headlineLimit(accounts)
   readonly property var headlinePercent: Model.livePercent(headline, nowSecs)
-  readonly property var dailyMap: Model.daily(rows, sessions, profile)
+  readonly property var prompts: usage && usage.prompts ? usage.prompts : ({})
+  readonly property var dailyMap: Model.daily(rows, sessions, profile, prompts)
   readonly property var heat: Model.heatmap(dailyMap, today, 53, metric)
   readonly property var summary: Model.summarize(rows, sessions, profile, Model.rangeStart(range, today), today)
   readonly property var streak: Model.streaks(dailyMap, today)
@@ -80,6 +81,11 @@ Panel {
   function levelColor(level) {
     if (level <= 0) return Util.alpha(root.fg, 0.08)
     return Util.alpha(root.claudeColor, [0, 0.3, 0.5, 0.75, 1][level])
+  }
+  // Days known only from the prompt log (no token data): a neutral ramp.
+  function promptLevelColor(level) {
+    if (level <= 0) return Util.alpha(root.fg, 0.08)
+    return Util.alpha(root.fg, [0, 0.2, 0.32, 0.46, 0.62][level])
   }
   function limitColor(p) {
     if (p >= 90) return root.urgentColor
@@ -291,7 +297,7 @@ Panel {
   // Agents: every 3 s while the list is on screen, otherwise each minute for
   // the bar's tooltip.
   Timer {
-    interval: root.opened && root.view === "agents" ? 3000 : 60000
+    interval: root.opened && (panel.split || root.view === "agents") ? 3000 : 60000
     running: true; repeat: true
     onTriggered: root.refreshAgents()
   }
@@ -322,6 +328,7 @@ Panel {
     var e = root.dailyMap[day]
     var label = root.fmtDay(day, "ddd d MMM")
     if (!e) return strings.t("activity.empty").arg(label)
+    if (e.promptsOnly) return strings.t("activity.promptsOnly").arg(label).arg(Model.formatCount(e.prompts)).arg(e.sessions)
     return strings.t("activity.day").arg(label).arg(Model.formatTokens(e.tokens)).arg(Model.formatCost(e.cost))
       .arg(Model.formatCount(e.messages)).arg(e.sessions)
   }
@@ -336,7 +343,7 @@ Panel {
   }
 
   readonly property string statusText: {
-    if (view === "agents" && hoverDay === "") return agentsData ? agentSummary(agentView.counts) : tr("agents.loading")
+    if (view === "agents" && !panel.split && hoverDay === "") return agentsData ? agentSummary(agentView.counts) : tr("agents.loading")
     if (hoverDay !== "") return dayText(hoverDay)
     if (headline) return strings.t("status.headline").arg(headline.label).arg(Model.formatPercent(headlinePercent))
       .arg(Model.formatCountdown(Math.max(0, (headline.resetsAt || nowSecs) - nowSecs)))
@@ -382,7 +389,13 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: panel.loadedContent
-    contentWidth: panel.fittedContentWidth(Style.space(520))
+    // Usage and Agents side by side when the screen has room for both columns;
+    // otherwise one column with the Usage | Agents switch.
+    readonly property real columnWidth: Style.space(520)
+    readonly property real columnGap: Style.space(28)
+    readonly property real splitWidth: 2 * columnWidth + columnGap
+    readonly property bool split: fittedContentWidth(splitWidth) >= splitWidth
+    contentWidth: split ? splitWidth : panel.fittedContentWidth(columnWidth)
     contentHeight: panel.fittedContentHeight(panel.loadedContentHeight)
 
     content: PanelKeyCatcher {
@@ -405,6 +418,14 @@ Panel {
         else root.close()
       }
       onTabRequested: function(direction) { root.switchPanel(direction) }
+      // An agent's key (shown on its row) opens it, as a click would.
+      onTextKey: function(text, modifiers) {
+        if (root.pendingAction || root.menuAgent) return
+        if (modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) return
+        if (!panel.split && root.view !== "agents") return
+        var a = Model.agentForKey(root.agentView, text)
+        if (a) root.openAgent(a)
+      }
 
       Column {
         id: column
@@ -433,7 +454,7 @@ Panel {
             id: heroLabels
             anchors.left: heroIcon.right
             anchors.leftMargin: Style.space(14)
-            anchors.right: heroPercent.left
+            anchors.right: heroChips.visible ? heroChips.left : heroPercent.left
             anchors.rightMargin: Style.space(10)
             anchors.verticalCenter: parent.verticalCenter
             spacing: Style.space(2)
@@ -462,6 +483,16 @@ Panel {
             }
           }
 
+          // Side by side, the profile chips ride in the title row instead of
+          // taking a row of their own.
+          ProfileChips {
+            id: heroChips
+            visible: panel.split && root.knownProfiles.length > 1
+            anchors.right: heroPercent.left
+            anchors.rightMargin: Style.space(24)
+            anchors.verticalCenter: parent.verticalCenter
+          }
+
           Text {
             id: heroPercent
             textFormat: Text.PlainText
@@ -475,8 +506,9 @@ Panel {
           }
         }
 
-        // ---------- View ----------
+        // ---------- View (one-column layout only) ----------
         ButtonGroup {
+          visible: !panel.split
           width: parent.width
           spacing: Style.space(6)
           focusable: false
@@ -491,26 +523,24 @@ Panel {
           onChanged: function(v) { root.setSetting("view", v); if (v === "agents") root.refreshAgents() }
         }
 
-        // ---------- Profiles ----------
-        ButtonGroup {
-          visible: root.knownProfiles.length > 1
+        // ---------- Profiles (own row in the one-column layout) ----------
+        ProfileChips {
+          visible: !panel.split && root.knownProfiles.length > 1
           width: parent.width
-          spacing: Style.space(6)
-          focusable: false
-          options: [{ value: "all", label: root.tr("profile.all") }].concat(
-            root.knownProfiles.map(function(p) { return { value: p.id, label: p.id } }))
-          value: root.profile
-          foreground: root.fg
-          fontFamily: root.fontFamily
-          fontSize: Style.font.bodySmall
-          onChanged: function(v) { root.setSetting("profile", v) }
         }
+
+        // ---------- Usage | Agents ----------
+        Row {
+          id: views
+          width: parent.width
+          spacing: panel.split ? panel.columnGap : 0
+          readonly property real paneWidth: panel.split ? (width - spacing) / 2 : width
 
         // ---------- Usage view ----------
         Column {
-          width: parent.width
+          width: views.paneWidth
           spacing: Style.space(14)
-          visible: root.view === "usage"
+          visible: panel.split || root.view === "usage"
 
         // ---------- Limits ----------
         Column {
@@ -691,7 +721,7 @@ Panel {
                 for (var i = 0; i < list.length; i++) {
                   var c = list[i]
                   if (c.future) continue
-                  ctx.fillStyle = root.levelColor(c.level)
+                  ctx.fillStyle = c.promptsOnly ? root.promptLevelColor(c.level) : root.levelColor(c.level)
                   ctx.beginPath()
                   ctx.roundedRect(c.col * p, c.row * p, s, s, r, r)
                   ctx.fill()
@@ -802,6 +832,25 @@ Panel {
             color: root.faint
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
+          }
+
+          Row {
+            visible: root.heat.promptsOnlyDays > 0
+            spacing: Style.space(5)
+            Rectangle {
+              width: Math.max(6, grid.pitch - grid.gap)
+              height: width
+              radius: 2
+              color: root.promptLevelColor(3)
+              anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
+              textFormat: Text.PlainText
+              text: root.tr("activity.promptsOnlyNote")
+              color: root.faint
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
           }
         }
 
@@ -926,9 +975,39 @@ Panel {
 
         // ---------- Agents view ----------
         Column {
-          width: parent.width
+          width: views.paneWidth
           spacing: Style.space(12)
-          visible: root.view === "agents"
+          visible: panel.split || root.view === "agents"
+
+          // Side by side there is no switch to carry the count, so the column
+          // gets its own header.
+          Item {
+            visible: panel.split
+            width: parent.width
+            implicitHeight: Math.max(agentsHeader.implicitHeight, agentsSummary.implicitHeight)
+            PanelSectionHeader {
+              id: agentsHeader
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.tr("view.agents")
+              foreground: root.fg
+              fontFamily: root.fontFamily
+            }
+            Text {
+              id: agentsSummary
+              anchors.left: agentsHeader.right
+              anchors.leftMargin: Style.space(12)
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              horizontalAlignment: Text.AlignRight
+              textFormat: Text.PlainText
+              text: root.agentsData ? root.agentSummary(root.agentView.counts) : root.tr("agents.loading")
+              color: root.faint
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              elide: Text.ElideRight
+            }
+          }
 
           Text {
             visible: !!root.agentsData && root.agentView.groups.length === 0
@@ -1010,6 +1089,7 @@ Panel {
             wrapMode: Text.WordWrap
           }
         }
+        }
       }
 
       // ---------- Right-click menu ----------
@@ -1073,6 +1153,19 @@ Panel {
 
   // ---------- Components ----------
 
+  // All / one chip per profile; filters both views.
+  component ProfileChips: ButtonGroup {
+    spacing: Style.space(6)
+    focusable: false
+    options: [{ value: "all", label: root.tr("profile.all") }].concat(
+      root.knownProfiles.map(function(p) { return { value: p.id, label: p.id } }))
+    value: root.profile
+    foreground: root.fg
+    fontFamily: root.fontFamily
+    fontSize: Style.font.bodySmall
+    onChanged: function(v) { root.setSetting("profile", v) }
+  }
+
   // One agent: status dot, name, age and profile; what it is doing; where it
   // runs; then any subagents still going. Click to jump to it.
   component AgentRow: Item {
@@ -1126,12 +1219,35 @@ Panel {
         width: parent.width
         implicitHeight: arName.implicitHeight
 
+        // The key that opens this agent while the panel has focus.
+        Rectangle {
+          id: arKey
+          width: Math.max(16, Style.space(18))
+          height: width
+          radius: Style.space(4)
+          color: "transparent"
+          border.width: 1
+          border.color: Util.alpha(root.fg, 0.25)
+          opacity: ar.agent && ar.agent.hotkey ? 1 : 0  // keeps its room so rows stay aligned
+          anchors.verticalCenter: parent.verticalCenter
+          Text {
+            anchors.centerIn: parent
+            textFormat: Text.PlainText
+            text: ar.agent ? ar.agent.hotkey : ""
+            color: root.faint
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+        }
         Rectangle {
           id: arDot
           width: Math.max(7, Style.space(8))
           height: width
           radius: width / 2
           color: ar.tint
+          anchors.left: arKey.right
+          anchors.leftMargin: Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
           SequentialAnimation on opacity {
             running: !!ar.agent && ar.agent.status === "working" && root.opened
@@ -1176,7 +1292,7 @@ Panel {
 
       Text {
         visible: ar.line !== ""
-        x: arDot.width + Style.space(8)
+        x: arDot.x + arDot.width + Style.space(8)
         width: parent.width - x
         textFormat: Text.PlainText
         text: ar.line
@@ -1190,7 +1306,7 @@ Panel {
       }
 
       Text {
-        x: arDot.width + Style.space(8)
+        x: arDot.x + arDot.width + Style.space(8)
         width: parent.width - x
         textFormat: Text.PlainText
         text: ar.meta
@@ -1204,7 +1320,7 @@ Panel {
         model: ar.agent ? ar.agent.subagents : []
         Text {
           required property var modelData
-          x: arDot.width + Style.space(8)
+          x: arDot.x + arDot.width + Style.space(8)
           width: arColumn.width - x
           textFormat: Text.PlainText
           text: "↳ " + [modelData.description || root.tr("agents.subagent"), modelData.type,

@@ -2,7 +2,9 @@
 
 A bar widget for the [Omarchy](https://omarchy.org) shell for people who use
 [Claude Code](https://docs.claude.com/en/docs/claude-code). The bar shows your
-current 5-hour limit. The popout has two views:
+current 5-hour limit. The popout shows two views side by side when the screen
+has room for both (about 1,070 logical pixels), and one at a time with a
+Usage | Agents switch on narrower screens:
 
 **Usage**
 - Plan limits (5-hour, weekly and per-model) with reset countdowns.
@@ -19,6 +21,8 @@ as *Needs you · Failed · Working · Idle · Finished*.
 - **Click** to jump to it: focuses the terminal it runs in (also a terminal
   showing it through Claude Code's agent view), or opens `claude attach` for a
   background job.
+- **Press its key** to do the same without the mouse: each row shows one
+  (`1`–`9`, `0`, then letters, skipping the panel's own `h j k l x`).
 - **Right-click** for more: show logs, stop, delete (`claude rm`, which never
   discards unpushed commits), end a session, or copy a resume command.
 
@@ -43,6 +47,9 @@ Update later with `omarchy plugin update kov.claude-usage`.
 ## Privacy and network use
 
 - Usage numbers come from your local transcripts (`<config dir>/projects/**/*.jsonl`).
+- Days from before the transcripts were cleaned up are filled in from Claude
+  Code's prompt log (`<config dir>/history.jsonl`): prompts and sessions only,
+  drawn in grey on the heatmap since their token counts are gone.
 - Plan limits come from Claude Code's own cached reading. While the popout is
   open, and at most every 5 minutes, the plugin refreshes them from
   `https://api.anthropic.com/api/oauth/usage` using the access token Claude Code
