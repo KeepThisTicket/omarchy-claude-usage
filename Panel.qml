@@ -389,7 +389,7 @@ Panel {
   Grid {
     id: dots
     visible: root.barDots.length > 0
-    readonly property real size: Math.max(10, Math.round(Style.bar.iconSize * 0.72))
+    readonly property real size: Math.max(12, Math.round(Style.bar.iconSize * 0.83))
     columns: button.vertical ? 1 : Math.max(1, root.barDots.length)
     spacing: Math.max(2, Math.round(Style.bar.iconSize * 0.18))
     x: button.vertical ? (root.width - width) / 2 : button.width + root.dotGap
@@ -402,6 +402,14 @@ Panel {
         height: dots.size
         radius: dots.size / 2
         color: root.agentColors[modelData] || root.fg
+        // Pulses like the working dot in the Agents list.
+        SequentialAnimation on opacity {
+          running: modelData === "working"
+          loops: Animation.Infinite
+          alwaysRunToEnd: true
+          NumberAnimation { from: 1; to: 0.35; duration: 700; easing.type: Easing.InOutSine }
+          NumberAnimation { from: 0.35; to: 1; duration: 700; easing.type: Easing.InOutSine }
+        }
       }
     }
   }
