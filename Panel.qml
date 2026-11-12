@@ -389,9 +389,9 @@ Panel {
   Grid {
     id: dots
     visible: root.barDots.length > 0
-    readonly property real size: Math.max(5, Math.round(Style.bar.iconSize * 0.36))
+    readonly property real size: Math.max(10, Math.round(Style.bar.iconSize * 0.72))
     columns: button.vertical ? 1 : Math.max(1, root.barDots.length)
-    spacing: Math.max(2, Math.round(size * 0.5))
+    spacing: Math.max(2, Math.round(Style.bar.iconSize * 0.18))
     x: button.vertical ? (root.width - width) / 2 : button.width + root.dotGap
     y: button.vertical ? button.height + root.dotGap : (root.height - height) / 2
     Repeater {
