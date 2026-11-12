@@ -382,6 +382,13 @@ function activeAgentCount(counts) {
   return counts ? counts.needs + counts.failed + counts.working + counts.idle : 0
 }
 
+// Statuses with at least one agent on screen, in panel order: one dot each on
+// the bar. Finished jobs folded away (older than a day) don't count.
+function barStatuses(view) {
+  if (!view || !view.groups) return []
+  return view.groups.map(function(g) { return g.status })
+}
+
 // "now", "4m", "3h", "2d"
 function formatAge(seconds) {
   var s = Math.max(0, Math.round(Number(seconds) || 0))
@@ -422,6 +429,7 @@ if (typeof module !== "undefined") {
     HOTKEYS: HOTKEYS,
     agentForKey: agentForKey,
     activeAgentCount: activeAgentCount,
+    barStatuses: barStatuses,
     formatAge: formatAge
   }
 }

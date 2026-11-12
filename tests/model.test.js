@@ -231,5 +231,22 @@ test("agent hotkeys follow screen order and skip the panel's own keys", () => {
   assert.strictEqual(M.agentForKey(M.agentView(ag, "all", NOW), "Z"), null)
 })
 
+test("bar dots: one per status present, in panel order", () => {
+  const NOW = 1_800_000_000
+  const ag = [
+    { key: "a", name: "a", profile: "p", status: "done", updatedAt: NOW - 60 },
+    { key: "b", name: "b", profile: "p", status: "working", updatedAt: NOW },
+    { key: "c", name: "c", profile: "p", status: "working", updatedAt: NOW },
+    { key: "d", name: "d", profile: "p", status: "needs", updatedAt: NOW },
+  ]
+  assert.deepStrictEqual(M.barStatuses(M.agentView(ag, "all", NOW)), ["needs", "working", "done"])
+  // Finished jobs folded away after a day don't light the dot.
+  const old = [{ key: "e", name: "e", profile: "p", status: "done", updatedAt: NOW - 2 * 86400 },
+               { key: "f", name: "f", profile: "p", status: "idle", updatedAt: NOW }]
+  assert.deepStrictEqual(M.barStatuses(M.agentView(old, "all", NOW)), ["idle"])
+  assert.deepStrictEqual(M.barStatuses(M.agentView([], "all", NOW)), [])
+  assert.deepStrictEqual(M.barStatuses(null), [])
+})
+
 if (failed) { console.log(failed + " failed"); process.exit(1) }
 console.log("all passed")
