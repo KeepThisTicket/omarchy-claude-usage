@@ -1276,15 +1276,22 @@ Panel {
           anchors.right: parent.right
           anchors.baseline: arName.baseline
           textFormat: Text.PlainText
+          // Working: how long the current run has gone on ("running 2h 5m").
+          // Otherwise: how long since it last changed.
+          readonly property bool running: !!ar.agent && ar.agent.status === "working" && !!ar.agent.runningSince
           text: {
             if (!ar.agent) return ""
-            var t = ar.agent.updatedAt || ar.agent.startedAt
             var parts = []
-            if (t) parts.push(Model.formatAge(root.nowSecs - t))
+            if (running) {
+              parts.push(strings.t("agents.runningFor").arg(Model.formatCountdown(root.nowSecs - ar.agent.runningSince)))
+            } else {
+              var t = ar.agent.updatedAt || ar.agent.startedAt
+              if (t) parts.push(Model.formatAge(root.nowSecs - t))
+            }
             parts.push(ar.agent.profile)
             return parts.join(" · ")
           }
-          color: root.faint
+          color: running ? ar.tint : root.faint
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
         }
