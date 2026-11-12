@@ -149,6 +149,7 @@ def remote_agents(state_dir, now):
                 "detail": one_line(rec.get("detail")), "prompt": one_line(rec.get("prompt")),
                 "cwd": cwd, "branch": None, "startedAt": None, "updatedAt": None,
                 "tokens": None, "alive": True, "subagents": [], "links": [],
+                "runningSince": None,  # mirrored records carry no start time
             })
     return out
 
@@ -297,6 +298,10 @@ def build_agent(prof, entry, job, session_file, waybar, now):
         "branch": job.get("worktreeBranch") or None,
         "startedAt": ms(entry.get("startedAt")), "updatedAt": updated,
         "tokens": tokens, "alive": isinstance(pid, int),
+        # When the current run began: a busy session's status last changed when
+        # it started working (it stays put through tool calls).
+        "runningSince": ms(session_file.get("statusUpdatedAt"))
+            if status == "working" and "busy" in (entry.get("status"), session_file.get("status")) else None,
         "subagents": running_subagents(prof["dir"], sid, now) if sid and isinstance(pid, int) else [],
         "links": links,
     }

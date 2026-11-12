@@ -63,6 +63,7 @@
   "agents.kind.background": "Background",
   "agents.kind.remote": "Remote",
   "agents.tokens": "%1 tokens",
+  "agents.runningFor": "running %1",
   "agents.subagent": "Subagent",
   "agents.hiddenDone": "%1 more finished over a day ago (claude agents --all)",
   "agents.noWindow": "No window found for %1. It may be running inside tmux or another app.",

@@ -115,6 +115,8 @@ class CollectTest(unittest.TestCase):
         self.assertEqual(a["claude:interactive:s-i1"]["status"], "idle")
         i2 = a["claude:interactive:s-i2"]
         self.assertEqual((i2["status"], i2["updatedAt"], i2["pid"]), ("working", 1794414900.0, 202))
+        self.assertEqual(i2["runningSince"], 1794414900.0)  # busy since its status last changed
+        self.assertIsNone(a["claude:interactive:s-i1"]["runningSince"])  # idle: not running
         i3 = a["claude:interactive:s-i3"]
         self.assertEqual((i3["status"], i3["detail"], i3["prompt"]),
                          ("needs", "Claude needs your permission to use Bash", "fix it"))
@@ -215,6 +217,7 @@ class CollectTest(unittest.TestCase):
             {"id": "b2", "kind": "background", "sessionId": "s-b2", "pid": 22, "status": "busy"},
             {"id": "b3", "kind": "background", "sessionId": "s-b3", "pid": 23, "status": "idle", "state": "blocked"},
         ]
+        write(os.path.join(m, "sessions", "22.json"), {"status": "busy", "statusUpdatedAt": 1794414000000})
         for job in ("b1", "b2", "b3"):
             write(os.path.join(m, "jobs", job, "state.json"),
                   {"state": "blocked", "tempo": "active" if job != "b3" else "idle",
@@ -222,7 +225,10 @@ class CollectTest(unittest.TestCase):
         a = by_key(self.f.collect())
         b1 = a["work:background:b1"]
         self.assertEqual((b1["status"], b1["rawState"], b1["detail"]), ("working", "working", "go ahead, start with the gap test"))
+        self.assertIsNone(b1["runningSince"])  # no session file: unknown, not made up
+        self.assertIsNone(a["work:background:b3"]["runningSince"])
         self.assertEqual(a["work:background:b2"]["status"], "working")   # no CLI state: busy wins over the file
+        self.assertEqual(a["work:background:b2"]["runningSince"], 1794414000.0)
         b3 = a["work:background:b3"]
         self.assertEqual((b3["status"], b3["detail"]), ("needs", "Should I go ahead?"))  # really waiting
 
