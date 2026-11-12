@@ -221,11 +221,14 @@ def classify(entry, job, session_file, waybar):
     """-> (status, rawState) for one `claude agents` entry."""
     status = str(entry.get("status") or "")
     if entry.get("kind") == "background":
-        raw = str((job or {}).get("state") or entry.get("state") or status or "")
+        # The CLI's state is the live one; the job's state file only moves on
+        # with the agent's next message (it says "blocked" for a while after
+        # the question has been answered).
+        raw = str(entry.get("state") or (job or {}).get("state") or status or "")
         mapped = STATE_MAP.get(raw)
-        # A finished job that has been prompted again is busy before its state
-        # file catches up.
-        if mapped == "done" and status == "busy":
+        # A busy process is neither waiting on you nor finished: it has been
+        # answered or prompted again and its state hasn't caught up yet.
+        if mapped in ("done", "needs") and status == "busy":
             return "working", raw
         # The job state comes from the agent's messages, and only a closing
         # "result:" line moves it on; a job that wraps up without one stays

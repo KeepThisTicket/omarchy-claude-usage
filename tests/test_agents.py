@@ -206,6 +206,26 @@ class CollectTest(unittest.TestCase):
         self.assertEqual(a["work:background:g3"]["status"], "working")
         self.assertEqual(a["work:background:g4"]["status"], "working")
 
+    def test_answered_job_is_working_not_needs(self):
+        # After the user answers a blocked job, its state file keeps "blocked"
+        # until the agent's next message; the CLI and the process know better.
+        m = self.f.dir(".claude-work")
+        self.f.cli_out[".claude-work"] = [
+            {"id": "b1", "kind": "background", "sessionId": "s-b1", "pid": 21, "status": "busy", "state": "working"},
+            {"id": "b2", "kind": "background", "sessionId": "s-b2", "pid": 22, "status": "busy"},
+            {"id": "b3", "kind": "background", "sessionId": "s-b3", "pid": 23, "status": "idle", "state": "blocked"},
+        ]
+        for job in ("b1", "b2", "b3"):
+            write(os.path.join(m, "jobs", job, "state.json"),
+                  {"state": "blocked", "tempo": "active" if job != "b3" else "idle",
+                   "detail": "go ahead, start with the gap test", "needs": "Should I go ahead?" if job == "b3" else None})
+        a = by_key(self.f.collect())
+        b1 = a["work:background:b1"]
+        self.assertEqual((b1["status"], b1["rawState"], b1["detail"]), ("working", "working", "go ahead, start with the gap test"))
+        self.assertEqual(a["work:background:b2"]["status"], "working")   # no CLI state: busy wins over the file
+        b3 = a["work:background:b3"]
+        self.assertEqual((b3["status"], b3["detail"]), ("needs", "Should I go ahead?"))  # really waiting
+
     def test_unknown_state_falls_back_on_busy(self):
         self.f.cli_out[".claude-work"] = [
             {"id": "f1", "kind": "background", "sessionId": "s1", "pid": 5, "status": "busy", "state": "mystery"},
