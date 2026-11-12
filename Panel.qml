@@ -38,6 +38,9 @@ Panel {
   property bool loading: false
   property real nowSecs: Date.now() / 1000
   property string hoverDay: ""
+  // The heatmap is folded away until asked for, and folds again on close.
+  property bool activityOpen: false
+  onActivityOpenChanged: if (!activityOpen) hoverDay = ""
 
   // Agents view: every Claude Code session and background job (agents.py).
   readonly property string view: String(setting("view", "usage")) === "agents" ? "agents" : "usage"
@@ -293,6 +296,7 @@ Panel {
     menuAgent = null
     pendingAction = null
     if (opened) { refresh(); refreshAgents(); agentNote = "" }
+    else activityOpen = false
   }
   // Agents: every 3 s while the list is on screen, otherwise every 15 s for
   // the bar's status dots and tooltip (one run takes ~0.3 s).
@@ -674,16 +678,45 @@ Panel {
           Item {
             width: parent.width
             implicitHeight: Math.max(activityHeader.implicitHeight, metricGroup.implicitHeight)
-            PanelSectionHeader {
-              id: activityHeader
+            // The whole row folds/unfolds the heatmap; the metric chips sit on top.
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.activityOpen = !root.activityOpen
+            }
+            Row {
               anchors.left: parent.left
               anchors.verticalCenter: parent.verticalCenter
-              text: root.tr("activity.header")
-              foreground: root.fg
-              fontFamily: root.fontFamily
+              spacing: Style.space(4)
+              Text {
+                anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
+                text: root.activityOpen ? "󰅀" : "󰅂"
+                color: root.faint
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+              PanelSectionHeader {
+                id: activityHeader
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.tr("activity.header")
+                foreground: root.fg
+                fontFamily: root.fontFamily
+              }
+            }
+            Text {
+              visible: !root.activityOpen
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              textFormat: Text.PlainText
+              text: strings.t("activity.collapsed").arg(strings.t("days").arg(root.streak.current)).arg(root.streak.activeDays)
+              color: root.faint
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
             }
             ButtonGroup {
               id: metricGroup
+              visible: root.activityOpen
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               spacing: Style.space(4)
@@ -699,6 +732,7 @@ Panel {
 
           Item {
             id: grid
+            visible: root.activityOpen
             width: parent.width
             readonly property int weeks: 53
             readonly property real gutter: Style.space(30)
@@ -804,6 +838,7 @@ Panel {
           }
 
           Item {
+            visible: root.activityOpen
             width: parent.width
             implicitHeight: Math.max(readout.implicitHeight, legend.implicitHeight)
 
@@ -859,6 +894,7 @@ Panel {
           }
 
           Text {
+            visible: root.activityOpen
             textFormat: Text.PlainText
             text: strings.t("activity.streak").arg(strings.t("days").arg(root.streak.current))
               .arg(strings.t("days").arg(root.streak.longest)).arg(root.streak.activeDays)
@@ -868,7 +904,7 @@ Panel {
           }
 
           Row {
-            visible: root.heat.promptsOnlyDays > 0
+            visible: root.activityOpen && root.heat.promptsOnlyDays > 0
             spacing: Style.space(5)
             Rectangle {
               width: Math.max(6, grid.pitch - grid.gap)
