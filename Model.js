@@ -24,6 +24,29 @@ function shiftRange(value, delta) {
   return RANGES[i].value
 }
 
+// ---------- Auto-refresh ----------
+// How often the plan limits are fetched online while the popout is closed.
+// "off" only re-reads cached readings (Claude Code's own and the popout's).
+var REFRESH_CHOICES = ["off", "2", "5", "10", "15"]
+var OPEN_MAX_AGE = 300  // the popout's full scan fetches limits at most this often
+var MAX_AGE_SLACK = 15  // so a timer tick landing a moment early still counts as stale
+
+function refreshMinutes(value) {
+  var v = String(value)
+  return REFRESH_CHOICES.indexOf(v) > 0 ? parseInt(v, 10) : 0
+}
+
+// Collector args for the closed popout's limits check every `minutes`.
+function limitsArgs(minutes) {
+  if (!(minutes > 0)) return ["--limits-only", "--no-network"]
+  return ["--limits-only", "--max-age", String(minutes * 60 - MAX_AGE_SLACK)]
+}
+
+// Max age for the open popout's scan: 5 minutes, or the auto period if shorter.
+function openMaxAge(minutes) {
+  return minutes > 0 ? Math.min(OPEN_MAX_AGE, minutes * 60 - MAX_AGE_SLACK) : OPEN_MAX_AGE
+}
+
 // ---------- Days ----------
 
 function pad2(n) { return n < 10 ? "0" + n : String(n) }
@@ -405,6 +428,10 @@ if (typeof module !== "undefined") {
     METRICS: METRICS,
     rangeIndex: rangeIndex,
     shiftRange: shiftRange,
+    REFRESH_CHOICES: REFRESH_CHOICES,
+    refreshMinutes: refreshMinutes,
+    limitsArgs: limitsArgs,
+    openMaxAge: openMaxAge,
     dayKey: dayKey,
     parseDay: parseDay,
     addDays: addDays,

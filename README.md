@@ -54,6 +54,10 @@ Update later with `omarchy plugin update kov.claude-usage`.
   open, and at most every 5 minutes, the plugin refreshes them from
   `https://api.anthropic.com/api/oauth/usage` using the access token Claude Code
   already stored. The token is only read: never refreshed, rewritten or logged.
+  With **Auto-check** (next to the Limits header) set to 2, 5, 10 or 15 minutes,
+  the same request also runs on that schedule while the popout is closed, so
+  the bar's percentage stays current. Off (the default) means the closed bar
+  only re-reads cached readings.
 - The agent list comes from `claude agents --json --all`, plus Claude Code's
   job and session files.
 - Daily totals are kept in `~/.local/state/kov-claude-usage/history.json`, so the
