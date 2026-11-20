@@ -248,5 +248,22 @@ test("bar dots: one per status present, in panel order", () => {
   assert.deepStrictEqual(M.barStatuses(null), [])
 })
 
+test("auto-refresh choices", () => {
+  assert.strictEqual(M.refreshMinutes("off"), 0)
+  assert.strictEqual(M.refreshMinutes("2"), 2)
+  assert.strictEqual(M.refreshMinutes("15"), 15)
+  assert.strictEqual(M.refreshMinutes("7"), 0)
+  assert.strictEqual(M.refreshMinutes(undefined), 0)
+})
+
+test("auto-refresh collector args", () => {
+  assert.deepStrictEqual(M.limitsArgs(0), ["--limits-only", "--no-network"])
+  assert.deepStrictEqual(M.limitsArgs(2), ["--limits-only", "--max-age", "105"])
+  assert.deepStrictEqual(M.limitsArgs(15), ["--limits-only", "--max-age", "885"])
+  assert.strictEqual(M.openMaxAge(0), 300)
+  assert.strictEqual(M.openMaxAge(2), 105)
+  assert.strictEqual(M.openMaxAge(10), 300)
+})
+
 if (failed) { console.log(failed + " failed"); process.exit(1) }
 console.log("all passed")

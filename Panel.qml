@@ -30,6 +30,12 @@ Panel {
     var v = String(setting("profile", "all"))
     return v === "all" || profileIds.indexOf(v) >= 0 ? v : "all"
   }
+  // Fetch the limits online every N minutes while closed ("off": cached readings only).
+  readonly property string autoRefresh: {
+    var v = String(setting("autoRefresh", "off"))
+    return Model.REFRESH_CHOICES.indexOf(v) >= 0 ? v : "off"
+  }
+  readonly property int autoMinutes: Model.refreshMinutes(autoRefresh)
 
   // ---------- Data ----------
   property var usage: null        // last full scan
@@ -110,13 +116,13 @@ Panel {
   function refresh() {
     if (collector.running) { collector.pending = true; return }
     root.loading = root.usage === null
-    collector.command = ["python3", "-I", root.collectorPath, "--max-age", "300"]
+    collector.command = ["python3", "-I", root.collectorPath, "--max-age", String(Model.openMaxAge(root.autoMinutes))]
     collector.running = true
   }
 
   function refreshLimits() {
     if (collector.running || limitsReader.running) return
-    limitsReader.command = ["python3", "-I", root.collectorPath, "--limits-only", "--no-network"]
+    limitsReader.command = ["python3", "-I", root.collectorPath].concat(Model.limitsArgs(root.autoMinutes))
     limitsReader.running = true
   }
 
@@ -305,10 +311,15 @@ Panel {
     running: true; repeat: true
     onTriggered: root.refreshAgents()
   }
-  // Open: full scan each minute (the network at most every 5). Closed: the
-  // bar's percentage from cached readings only.
+  // Open: full scan each minute (the network at most every 5, or the auto
+  // period if shorter). Closed: the bar's percentage, fetched online every
+  // N minutes with auto-refresh on, otherwise from cached readings every 5.
   Timer { interval: 60000; running: root.opened; repeat: true; onTriggered: root.refresh() }
-  Timer { interval: 300000; running: !root.opened; repeat: true; onTriggered: root.refreshLimits() }
+  Timer {
+    interval: (root.autoMinutes || 5) * 60000
+    running: !root.opened; repeat: true
+    onTriggered: root.refreshLimits()
+  }
   Timer { interval: 30000; running: true; repeat: true; onTriggered: root.nowSecs = Date.now() / 1000 }
 
   // ---------- Text ----------
@@ -584,10 +595,42 @@ Panel {
           width: parent.width
           spacing: Style.space(10)
 
-          PanelSectionHeader {
-            text: root.tr("limits.header")
-            foreground: root.fg
-            fontFamily: root.fontFamily
+          Item {
+            width: parent.width
+            implicitHeight: Math.max(limitsHeader.implicitHeight, refreshGroup.implicitHeight)
+            PanelSectionHeader {
+              id: limitsHeader
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.tr("limits.header")
+              foreground: root.fg
+              fontFamily: root.fontFamily
+            }
+            Text {
+              anchors.right: refreshGroup.left
+              anchors.rightMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              textFormat: Text.PlainText
+              text: root.tr("refresh.label")
+              color: root.faint
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            ButtonGroup {
+              id: refreshGroup
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(4)
+              focusable: false
+              options: Model.REFRESH_CHOICES.map(function(c) {
+                return { value: c, label: c === "off" ? root.tr("refresh.off") : strings.t("refresh.minutes").arg(c) }
+              })
+              value: root.autoRefresh
+              foreground: root.fg
+              fontFamily: root.fontFamily
+              fontSize: Style.font.caption
+              onChanged: function(v) { root.setSetting("autoRefresh", v); root.refresh() }
+            }
           }
 
           Text {
